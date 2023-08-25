@@ -29,7 +29,7 @@ impl Polynomial {
     }
 
     fn get_y(&self, x: &f32) -> f32 {
-        (&self.0).into_iter()
+        self.0.iter()
             .enumerate()
             .fold(0.0, |acc, c| acc + x.powi(c.0 as i32) * (c.1))
     }
@@ -57,12 +57,12 @@ struct LagrangePolynomial {
 
 impl LagrangePolynomial {
     fn get_bweights(points: &[Point]) -> Vec<Bterm> {
-        points.into_iter()
+        points.iter()
                 .map(|point: &Point|
                     Bterm {
                         p: Point {x: point.x, y: point.y},
                         w: points
-                            .into_iter()
+                            .iter()
                             .map(|p: &Point | point.x - p.x )
                             .filter(|p| *p != 0_f32)
                             .product::<f32>()
@@ -72,8 +72,8 @@ impl LagrangePolynomial {
     }
 
     fn get_y(&self, x:&f32) -> f32 {
-        let terms: (f32, f32) = (&self.bterms)
-            .into_iter()
+        let terms: (f32, f32) = self.bterms
+            .iter()
             .fold((0.0, 0.0),
                 |acc, bterm| {
                     let temp = (x - bterm.p.x) * bterm.w;
