@@ -6,9 +6,6 @@
 //  3. Rewrite this as a library with proper interface and structuring
 //  4. Write tests
 //  5. Add checks (e.g., interpolation points are actually different)
-//  6. Handle case where interpolating point is fed into get_points()
-
-use std::vec;
 
 #[derive(Debug, PartialEq)]
 struct Point {
@@ -16,15 +13,15 @@ struct Point {
     y : f32
 }
 
-trait PolyInterpolate {
-    fn interpolate(points: &[Point]) -> Self; 
+trait PolyInterpolate<'a> {
+    fn interpolate(points: &'a [Point]) -> Self;
 }
 
 #[derive(Debug)]
-struct Polynomial(Vec<f32>);
+struct Polynomial<'a>(&'a[f32]);
 
-impl Polynomial {
-    fn new(coeffs : Vec<f32>) -> Self {
+impl<'a> Polynomial<'a> {
+    fn new(coeffs : &'a[f32]) -> Self {
         Polynomial(coeffs)
     }
 
@@ -45,22 +42,22 @@ impl Polynomial {
 // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Barycentric_form
 
 #[derive(Debug)]
-struct Bterm {
+struct Bterm<'a> {
     w : f32,
-    p : Point
+    p : &'a Point
 }
 
 #[derive(Debug)]
-struct LagrangePolynomial {
-    bterms : Vec<Bterm>
+struct LagrangePolynomial<'a> {
+    bterms : Vec<Bterm<'a>>
 }
 
-impl LagrangePolynomial {
-    fn get_bweights(points: &[Point]) -> Vec<Bterm> {
+impl<'a> LagrangePolynomial<'a> {
+    fn get_bweights(points: &'a [Point]) -> Vec<Bterm> {
         points.iter()
                 .map(|point: &Point|
                     Bterm {
-                        p: Point {x: point.x, y: point.y},
+                        p: point,
                         w: points
                             .iter()
                             .map(|p: &Point | point.x - p.x )
@@ -72,16 +69,25 @@ impl LagrangePolynomial {
     }
 
     fn get_y(&self, x:&f32) -> f32 {
-        let terms: (f32, f32) = self.bterms
+        // check if this is one of the interpolation points
+        if let Some(bweight) = self.bterms
             .iter()
-            .fold((0.0, 0.0),
-                |acc, bterm| {
-                    let temp = (x - bterm.p.x) * bterm.w;
-                    (acc.0 + (bterm.p.y / temp), acc.1 + (1.0 / temp))
-                }
-            );
+            .find(|b| b.p.x == *x) {
+                bweight.p.y
+        }
+        // else compute y
+        else {
+            let terms: (f32, f32) = self.bterms
+                .iter()
+                .fold((0.0, 0.0),
+                    |acc, bterm| {
+                        let temp = (x - bterm.p.x) * bterm.w;
+                        (acc.0 + (bterm.p.y / temp), acc.1 + (1.0 / temp))
+                    }
+                );
 
-        terms.0 / terms.1
+            terms.0 / terms.1
+        }
     }
 
     fn get_points(&self, xs : &[f32]) -> Vec<Point> {
@@ -91,8 +97,8 @@ impl LagrangePolynomial {
     }
 }
 
-impl PolyInterpolate for LagrangePolynomial {
-    fn interpolate(points: &[Point]) -> Self {
+impl<'a> PolyInterpolate<'a> for LagrangePolynomial<'a> {
+    fn interpolate(points: &'a [Point]) -> Self {
         LagrangePolynomial { bterms: LagrangePolynomial::get_bweights(points) }
     }
 }
@@ -103,14 +109,15 @@ impl PolyInterpolate for LagrangePolynomial {
 #[derive(Debug)]
 struct NewtonPolynomial {}
 
-impl PolyInterpolate for NewtonPolynomial {
-    fn interpolate(_points: &[Point]) -> Self {
-        NewtonPolynomial {}
-    }
-}
+// impl<'a> PolyInterpolate<'a> for NewtonPolynomial<'a> {
+//     fn interpolate(_points: &'a [Point]) -> Self {
+//         NewtonPolynomial {}
+//     }
+// }
+
 
 fn main() {
-    let p: Polynomial = Polynomial::new(vec!(1.9, 9.2, 7.0));
+    let p: Polynomial = Polynomial::new(&[1.9, 9.2, 7.0]);
     let points = p.get_points(&[1.8,37.2,80.9]);
 
     let lp = LagrangePolynomial::interpolate(&points);
@@ -122,6 +129,4 @@ fn main() {
         .filter(|x| (x.0.y - x.1.y).abs() > 0.01)
         .count();
     println!("{}", count);
-
-    println!("{:?}", lp.get_points(&[44_f32]));
 }
