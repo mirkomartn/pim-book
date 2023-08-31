@@ -17,6 +17,17 @@ trait PolyInterpolate<'a> {
     fn interpolate(points: &'a [Point]) -> Self;
 }
 
+trait PolyGetPoints {
+
+    fn get_y(&self, x: &f32) -> f32;
+
+    fn get_points(&self, xs : &[f32]) -> Vec<Point> {
+        xs.iter()
+          .map(|x| Point{x: *x, y: self.get_y(x)})
+          .collect()
+    }
+}
+
 #[derive(Debug)]
 struct Polynomial<'a>(&'a[f32]);
 
@@ -24,17 +35,13 @@ impl<'a> Polynomial<'a> {
     fn new(coeffs : &'a[f32]) -> Self {
         Polynomial(coeffs)
     }
+}
 
+impl PolyGetPoints for Polynomial<'_> {
     fn get_y(&self, x: &f32) -> f32 {
         self.0.iter()
             .enumerate()
             .fold(0.0, |acc, c| acc + x.powi(c.0 as i32) * (c.1))
-    }
-
-    fn get_points(&self, xs : &[f32]) -> Vec<Point> {
-        xs.iter()
-          .map(|x| Point{x: *x, y: self.get_y(x)})
-          .collect()
     }
 }
 
@@ -67,7 +74,9 @@ impl<'a> LagrangePolynomial<'a> {
                 )
                 .collect()
     }
+}
 
+impl PolyGetPoints for LagrangePolynomial<'_> {
     fn get_y(&self, x:&f32) -> f32 {
         // check if this is one of the interpolation points
         if let Some(bweight) = self.bterms
@@ -89,12 +98,6 @@ impl<'a> LagrangePolynomial<'a> {
             terms.0 / terms.1
         }
     }
-
-    fn get_points(&self, xs : &[f32]) -> Vec<Point> {
-        xs.iter()
-          .map(|x| Point {x: *x, y: self.get_y(x)})
-          .collect()
-    }
 }
 
 impl<'a> PolyInterpolate<'a> for LagrangePolynomial<'a> {
@@ -103,17 +106,18 @@ impl<'a> PolyInterpolate<'a> for LagrangePolynomial<'a> {
     }
 }
 
-
 // See https://en.wikipedia.org/wiki/Newton_polynomial
 
 #[derive(Debug)]
-struct NewtonPolynomial {}
+struct NewtonPolynomial<'a> {
+    _points : &'a [Point]
+}
 
-// impl<'a> PolyInterpolate<'a> for NewtonPolynomial<'a> {
-//     fn interpolate(_points: &'a [Point]) -> Self {
-//         NewtonPolynomial {}
-//     }
-// }
+impl<'a> PolyInterpolate<'a> for NewtonPolynomial<'a> {
+    fn interpolate(points: &'a [Point]) -> Self {
+        NewtonPolynomial {_points : points}
+    }
+}
 
 
 fn main() {
