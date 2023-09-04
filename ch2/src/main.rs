@@ -6,6 +6,7 @@
 //  3. Rewrite this as a library with proper interface and structuring
 //  4. Write tests
 //  5. Add checks (e.g., interpolation points are actually different)
+//  6. Make NewtonPolynomial::ddiff more efficient
 
 #[derive(Debug, PartialEq)]
 struct Point {
@@ -110,12 +111,54 @@ impl<'a> PolyInterpolate<'a> for LagrangePolynomial<'a> {
 
 #[derive(Debug)]
 struct NewtonPolynomial<'a> {
-    _points : &'a [Point]
+    points : &'a [Point],
+    ddiffs : Vec<f32> // divided differences
+}
+
+impl NewtonPolynomial<'_> {
+    fn get_ddiffs(points : &[Point]) -> Vec<f32> {
+        points.iter()
+            .enumerate()
+            .map(|j| Self::ddiff(0, j.0 as i32, points))
+            .collect()
+    }
+
+    // compute divided differences with naive recursion
+    fn ddiff(i: i32, j: i32, points: &[Point]) -> f32 {
+        match (i - j).abs() {
+            0 => points[i as usize].y,
+            1 => (points[j as usize].y - points[i as usize].y) / (points[j as usize].x - points[i as usize].x),
+            _ => (Self::ddiff(i + 1, j, points) - Self::ddiff(i, j - 1, points)) / (points[j as usize].x - points[i as usize].x)
+        }
+    }
 }
 
 impl<'a> PolyInterpolate<'a> for NewtonPolynomial<'a> {
     fn interpolate(points: &'a [Point]) -> Self {
-        NewtonPolynomial {_points : points}
+        NewtonPolynomial {points : points, ddiffs : NewtonPolynomial::get_ddiffs(points)}
+    }
+}
+
+impl PolyGetPoints for NewtonPolynomial<'_> {
+
+    fn get_y(&self, x: &f32) -> f32 {
+        if let Some(point) = self.points
+            .iter()
+            .find(|p| p.x == *x) {
+                point.y
+        } else {
+            self.ddiffs[1..].iter()
+                .zip(self.points.iter()
+                        .map(|p| *x - p.x )
+                        .scan(1_f32, |acc, x| {
+                            *acc = *acc * x;
+                            Some(*acc)
+                        }) // Newton basis polynomials
+                )
+                .map(|z| *z.0 * z.1)
+                .sum::<f32>()
+            + self.ddiffs[0] // first divided difference in the sum doesn't have a multiplier
+        }
     }
 }
 
@@ -125,12 +168,21 @@ fn main() {
     let points = p.get_points(&[1.8,37.2,80.9]);
 
     let lp = LagrangePolynomial::interpolate(&points);
+    let np = NewtonPolynomial::interpolate(&points);
 
     let test_points: Vec<f32> = (10u8..100u8).map(f32::from).collect();
-    let count = p.get_points(&test_points)
+
+    let count_lp = p.get_points(&test_points)
         .into_iter()
         .zip(lp.get_points(&test_points).into_iter())
         .filter(|x| (x.0.y - x.1.y).abs() > 0.01)
         .count();
-    println!("{}", count);
+    println!("{}", count_lp);
+
+    let count_np = p.get_points(&test_points)
+        .into_iter()
+        .zip(np.get_points(&test_points).into_iter())
+        .filter(|x| (x.0.y - x.1.y).abs() > 0.05)
+        .count();
+    println!("{}", count_np);
 }
